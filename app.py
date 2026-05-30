@@ -4,7 +4,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-st.set_page_config(page_title="LBO Value Creation Bridge", layout="wide")
+st.set_page_config(
+    page_title="LBO Value Creation Bridge",
+    page_icon="💰",
+    layout="wide",
+)
 
 # ---------------------------------------------------------------------------
 # Defaults & Presets
@@ -314,6 +318,15 @@ div[data-baseweb="notification"] {
     [data-testid="stTab"] button { font-size: 0.75rem; padding: 0.35rem 0.6rem; }
     [data-testid="stSidebar"] { min-width: 260px; }
 }
+
+/* ── Print-friendly ── */
+@media print {
+    [data-testid="stSidebar"] { display: none !important; }
+    .stApp { background: #ffffff !important; }
+    h1 { font-size: 1.4rem; border-bottom-color: #ccc; }
+    [data-testid="stMetric"] { box-shadow: none; border: 1px solid #ddd; }
+    [data-testid="stTabs"] { box-shadow: none; border: 1px solid #ddd; }
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -325,6 +338,7 @@ div[data-baseweb="notification"] {
 
 st.title("LBO Value Creation Bridge")
 st.caption("All currency values are shown in USD millions ($mm).")
+st.info("For educational purposes only. Not investment advice.", icon="ℹ️")
 
 
 def format_currency(value: float) -> str:
@@ -338,6 +352,15 @@ def format_currency(value: float) -> str:
 def load_preset(name: str) -> None:
     for key in DEFAULT_ASSUMPTIONS:
         st.session_state[key] = PRESETS[name][key]
+
+
+# Seed session state from URL query params so users can share scenarios via link
+for key in DEFAULT_ASSUMPTIONS:
+    if key in st.query_params:
+        try:
+            st.session_state[key] = float(st.query_params[key])
+        except (ValueError, TypeError):
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -448,6 +471,16 @@ holding_period_years = st.sidebar.number_input(
         "A longer period allows more operational improvement (or decay)."
     ),
 )
+
+st.sidebar.divider()
+if st.sidebar.button(
+    "🔗 Copy Shareable Link",
+    use_container_width=True,
+    help="Updates the URL with your current inputs so you can share this scenario.",
+):
+    for key in DEFAULT_ASSUMPTIONS:
+        st.query_params[key] = str(st.session_state.get(key, DEFAULT_ASSUMPTIONS[key]))
+    st.toast("🔗 Link updated! Copy the URL from your browser to share this scenario.", icon="🔗")
 
 # ---------------------------------------------------------------------------
 # Validation
@@ -948,14 +981,30 @@ flows directly to equity holders.
         st.markdown(
             """
 - **EBITDA Growth** reflects operational performance
-  \u2014 the company\u2019s earnings power increased.
+  — the company's earnings power increased.
 - **Multiple Expansion** reflects market sentiment
-  \u2014 investors pay more for each dollar of earnings.
+  — investors pay more for each dollar of earnings.
 - **The Interaction Effect** is the "double count" of
-  simultaneous growth and re-rating \u2014 largest when
+  simultaneous growth and re-rating — largest when
   both move significantly in the same direction.
 - **Debt Paydown** directly increases equity
-  \u2014 leverage amplifies both gains and losses.
+  — leverage amplifies both gains and losses.
 - If the model is balanced (reconciliation < $0.01), the math is correct.
         """
         )
+
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+
+st.divider()
+st.markdown(
+    """
+    <div style="text-align:center; color:#8f8f9f; font-size:0.8rem; padding: 1rem 0;">
+        Built by an MBA student ·
+        <a href="https://github.com/KaramelBytes/LBO-learning-sim" target="_blank" style="color:#8f8f9f; text-decoration:underline;">View source on GitHub</a> ·
+        MIT Licensed
+    </div>
+    """,
+    unsafe_allow_html=True,
+)

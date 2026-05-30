@@ -9,6 +9,8 @@ A finance-focused Streamlit dashboard for decomposing equity value creation in a
 
 The app is designed for MBA classroom demos and practitioner-style walkthroughs.
 
+> ⚠️ **Disclaimer:** This tool is for educational purposes only. It is not investment advice, and none of the outputs should be relied upon for actual transaction or valuation decisions.
+
 ## Try It Live
 
 The app is deployed on Streamlit Community Cloud:
