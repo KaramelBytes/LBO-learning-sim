@@ -349,6 +349,11 @@ def format_currency(value: float) -> str:
     return f"${value:,.0f}"
 
 
+def md_currency(value: float) -> str:
+    """Escape dollar signs for use inside st.markdown to avoid LaTeX math mode."""
+    return format_currency(value).replace("$", r"\$")
+
+
 def load_preset(name: str) -> None:
     for key in DEFAULT_ASSUMPTIONS:
         st.session_state[key] = PRESETS[name][key]
@@ -374,7 +379,7 @@ st.sidebar.subheader("Scenario Presets")
 preset_cols = st.sidebar.columns(2)
 for i, name in enumerate(PRESETS):
     with preset_cols[i % 2]:
-        if st.button(name, key=f"preset_{name}", use_container_width=True):
+        if st.button(name, key=f"preset_{name}", width="stretch"):
             load_preset(name)
             st.rerun()
 
@@ -388,7 +393,7 @@ if active_preset:
 
 st.sidebar.divider()
 
-if st.sidebar.button("Reset to Defaults", use_container_width=True):
+if st.sidebar.button("Reset to Defaults", width="stretch"):
     for key, value in DEFAULT_ASSUMPTIONS.items():
         st.session_state[key] = value
     st.rerun()
@@ -475,7 +480,7 @@ holding_period_years = st.sidebar.number_input(
 st.sidebar.divider()
 if st.sidebar.button(
     "🔗 Copy Shareable Link",
-    use_container_width=True,
+    width="stretch",
     help="Updates the URL with your current inputs so you can share this scenario.",
 ):
     for key in DEFAULT_ASSUMPTIONS:
@@ -677,7 +682,7 @@ with bridge_tab:
         zerolinewidth=1,
     )
 
-    st.plotly_chart(waterfall, use_container_width=True)
+    st.plotly_chart(waterfall, width="stretch")
 
     if invalid_capital_structure:
         st.error(
@@ -737,7 +742,7 @@ with data_tab:
     ]
 
     summary_df = pd.DataFrame(summary_rows, columns=["Metric", "Value"])
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    st.dataframe(summary_df, width="stretch", hide_index=True)
 
     is_balanced = abs(reconciliation_check) < 0.01
     if is_balanced:
@@ -766,18 +771,18 @@ with summary_tab:
         primary_driver = max(driver_candidates, key=driver_candidates.get)
         primary_driver_value = driver_candidates[primary_driver]
         st.markdown(
-            f"The deal **created {format_currency(abs(value_creation))} million** "
+            f"The deal **created {md_currency(abs(value_creation))} million** "
             f"in equity value. The primary driver was **{primary_driver}**, "
-            f"contributing {format_currency(primary_driver_value)} million."
+            f"contributing {md_currency(primary_driver_value)} million."
         )
     elif value_creation < 0:
         primary_driver = min(driver_candidates, key=driver_candidates.get)
         primary_driver_value = abs(driver_candidates[primary_driver])
         st.markdown(
-            f"The deal **eroded {format_currency(abs(value_creation))} million** "
+            f"The deal **eroded {md_currency(abs(value_creation))} million** "
             f"in equity value. The primary driver of value loss was "
             f"**{primary_driver}**, reducing equity by "
-            f"{format_currency(primary_driver_value)} million."
+            f"{md_currency(primary_driver_value)} million."
         )
     else:
         st.write("Net equity value was unchanged over the holding period.")
@@ -816,7 +821,7 @@ with summary_tab:
                 prefix = ""
             st.markdown(
                 f"{badge} **{label}**: "
-                f"{prefix}{format_currency(abs(val))} mm"
+                f"{prefix}{md_currency(abs(val))} mm"
             )
             st.caption(desc)
 
@@ -868,7 +873,7 @@ with summary_tab:
     contrib_fig.update_xaxes(showgrid=True, gridcolor="#f0ebe3")
     contrib_fig.update_yaxes(showgrid=False)
 
-    st.plotly_chart(contrib_fig, use_container_width=True)
+    st.plotly_chart(contrib_fig, width="stretch")
 
 # ---------------------------------------------------------------------------
 # Tab 4: How It Works
@@ -888,17 +893,17 @@ with how_tab:
             f"""
 **Enterprise Value (EV)** = EBITDA \u00d7 Multiple
 
-- **Entry EV**: {entry_ebitda:,.0f} \u00d7 {entry_multiple:.0f}x = **{format_currency(entry_ev)}**
-- **Exit EV**: {exit_ebitda:,.0f} \u00d7 {exit_multiple:.0f}x = **{format_currency(exit_ev)}**
+- **Entry EV**: {entry_ebitda:,.0f} \u00d7 {entry_multiple:.0f}x = **{md_currency(entry_ev)}**
+- **Exit EV**: {exit_ebitda:,.0f} \u00d7 {exit_multiple:.0f}x = **{md_currency(exit_ev)}**
 
 **Equity Value** = Enterprise Value \u2212 Net Debt
 
 - **Entry Equity**:
-  {format_currency(entry_ev)} \u2212 {format_currency(initial_debt)}
-  = **{format_currency(entry_equity)}**
+  {md_currency(entry_ev)} \u2212 {md_currency(initial_debt)}
+  = **{md_currency(entry_equity)}**
 - **Exit Equity**:
-  {format_currency(exit_ev)} \u2212 {format_currency(exit_net_debt)}
-  = **{format_currency(exit_equity)}**
+  {md_currency(exit_ev)} \u2212 {md_currency(exit_net_debt)}
+  = **{md_currency(exit_equity)}**
         """
         )
 
@@ -930,15 +935,15 @@ is the additional value created beyond what each would have generated alone.
 |-----------|------------|-------|
 | EBITDA Growth |
   ({exit_ebitda:,.0f} \u2212 {entry_ebitda:,.0f}) \u00d7 {entry_multiple:.0f}x
-  | **{format_currency(ebitda_growth_impact)}** |
+  | **{md_currency(ebitda_growth_impact)}** |
 | Multiple Expansion |
   {entry_ebitda:,.0f} \u00d7 ({exit_multiple:.0f}x \u2212 {entry_multiple:.0f}x)
-  | **{format_currency(multiple_expansion_impact)}** |
+  | **{md_currency(multiple_expansion_impact)}** |
 | Interaction Effect |
   ({exit_ebitda:,.0f} \u2212 {entry_ebitda:,.0f})
   \u00d7 ({exit_multiple:.0f}x \u2212 {entry_multiple:.0f}x)
-  | **{format_currency(interaction_effect)}** |
-| **Total \u0394EV** | | **{format_currency(delta_ev)}** |
+  | **{md_currency(interaction_effect)}** |
+| **Total \u0394EV** | | **{md_currency(delta_ev)}** |
         """
         )
 
@@ -948,14 +953,14 @@ is the additional value created beyond what each would have generated alone.
 Equity value also changes when debt is paid down (or added). Every dollar of debt paydown
 flows directly to equity holders.
 
-- **{debt_label}**: {format_currency(debt_effect)}
+- **{debt_label}**: {md_currency(debt_effect)}
 
 **Full Bridge Identity:**
 
 > Exit Equity = Entry Equity + EBITDA Growth + Multiple Expansion
 > + Interaction Effect + Debt Component
 
-**Reconciliation Check:** {format_currency(reconciliation_check)}
+**Reconciliation Check:** {md_currency(reconciliation_check)}
         """
         )
         if abs(reconciliation_check) < 0.01:
@@ -968,7 +973,7 @@ flows directly to equity holders.
             f"""
 **MOIC** (Multiple of Invested Capital) = Exit Equity \u00f7 Entry Equity
 
-- MOIC = {format_currency(exit_equity)} \u00f7 {format_currency(entry_equity)} = **{moic_display}**
+- MOIC = {md_currency(exit_equity)} \u00f7 {md_currency(entry_equity)} = **{moic_display}**
 
 **IRR** (Internal Rate of Return) = MOIC^(1/n) \u2212 1, where n = holding period
 
