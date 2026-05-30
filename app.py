@@ -682,7 +682,7 @@ with bridge_tab:
         zerolinewidth=1,
     )
 
-    st.plotly_chart(waterfall, width="stretch")
+    st.plotly_chart(waterfall, use_container_width=True)
 
     if invalid_capital_structure:
         st.error(
@@ -873,7 +873,7 @@ with summary_tab:
     contrib_fig.update_xaxes(showgrid=True, gridcolor="#f0ebe3")
     contrib_fig.update_yaxes(showgrid=False)
 
-    st.plotly_chart(contrib_fig, width="stretch")
+    st.plotly_chart(contrib_fig, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Tab 4: How It Works
