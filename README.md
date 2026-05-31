@@ -15,9 +15,7 @@ The app is designed for MBA classroom demos and practitioner-style walkthroughs.
 
 The app is deployed on Streamlit Community Cloud:
 
-**[Open the LBO Value Creation Bridge](https://placeholder.streamlit.app)**
-
-*(Replace the above link with your actual Streamlit Community Cloud URL after deployment.)*
+**[Open the LBO Value Creation Bridge](https://lbo-learning-sim-karamelbytes.streamlit.app)**
 
 ## What It Teaches
 
