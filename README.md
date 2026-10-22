@@ -8,6 +8,8 @@ A finance-focused Streamlit dashboard for decomposing equity value creation in a
 - **Debt Paydown / Additional Borrowing Impact**
 
 The app is designed for MBA classroom demos and practitioner-style walkthroughs.
+It attributes equity value changes between entry and exit; it does not forecast operating
+cash flow or test whether assumed debt repayment is fundable.
 
 > ⚠️ **Disclaimer:** This tool is for educational purposes only. It is not investment advice, and none of the outputs should be relied upon for actual transaction or valuation decisions.
 
@@ -35,6 +37,8 @@ The four components map to the real-world decisions and market forces in any buy
 - Plotly waterfall bridge from Entry Equity to Exit Equity
 - Four-tab layout: Bridge, Detailed Data, Executive Summary, and How It Works
 - Five scenario presets (Growth Story, Multiple Expansion, Debt Paydown, Distressed, All Engines)
+  with discussion questions
+- Shareable scenario URLs that initialize inputs while allowing subsequent edits and presets
 - Educational tooltips on every input field
 - Dynamic executive summary narrative (value creation vs. value erosion vs. invalid structure)
 - Live algebraic walkthrough that uses your current inputs as worked examples
@@ -62,13 +66,18 @@ The four components map to the real-world decisions and market forces in any buy
 ### Reconciliation
 
 - Reconciliation Check = Exit Equity - (Entry Equity + sum(all bridge components))
-- Balanced status is true when |Reconciliation Check| < $0.01
+- Bridge arithmetic reconciles when |Reconciliation Check| < 0.01 USD million ($10,000)
+- The tolerance is applied to the unrounded residual
+- Reconciliation checks arithmetic consistency, not economic feasibility
 
 ### Return Metrics
 
 - MOIC = Exit Equity / Entry Equity
 - IRR = MOIC^(1 / Holding Period Years) - 1
 - IRR shown here assumes a single terminal equity cash flow and no interim dividends.
+- With positive entry equity and zero exit equity, MOIC is 0.00x and IRR is -100%.
+- Negative exit equity and MOIC are algebraic residuals, not ordinary shareholder sale
+  proceeds or investor cash-flow returns; IRR is N/M for these cases.
 
 ## Inputs and Assumption Notes
 
@@ -77,9 +86,21 @@ The four components map to the real-world decisions and market forces in any buy
 - Holding period must be >= 1 year
 - If Entry Equity <= 0, MOIC and IRR are displayed as N/M (Not Meaningful)
 
+### Reading Contributions
+
+Contribution percentages divide each signed component by the absolute net equity change.
+Positive values add equity and negative values reduce it. Offsetting drivers can exceed
+100%; percentages sum to +100% for a net gain or -100% for a net loss before rounding.
+They are N/M when the net change is zero.
+
+Interaction is positive when EBITDA and the multiple both rise or both fall. In the latter
+case, it offsets the overlap between the separately calculated losses; it is not an
+independent operating lever.
+
 ## Project Structure
 
-- `app.py`: Streamlit application (single file, ~960 lines)
+- `app.py`: Streamlit application (single file)
+- `tests/test_app.py`: Scenario and interaction regression checks
 - `requirements.txt`: Python dependencies
 - `requirements.lock.txt`: Fully pinned dependency lockfile for reproducibility
 - `requirements-dev.txt`: Developer tooling dependencies (linting)
@@ -116,6 +137,7 @@ The app will open in your browser at `http://localhost:8501`.
 pip install -r requirements-dev.txt
 ruff check .
 python -m py_compile app.py
+python -m unittest discover -s tests -v
 ```
 
 ## License

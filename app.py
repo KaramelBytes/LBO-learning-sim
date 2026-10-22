@@ -338,20 +338,24 @@ div[data-baseweb="notification"] {
 
 st.title("LBO Value Creation Bridge")
 st.caption("All currency values are shown in USD millions ($mm).")
+st.caption(
+    "This bridge attributes equity value changes between entry and exit. "
+    "It does not forecast operating cash flow or test whether debt repayment is fundable."
+)
 st.info("For educational purposes only. Not investment advice.", icon="ℹ️")
 
 
-def format_currency(value: float) -> str:
+def format_currency(value: float, decimals: int = 0) -> str:
     if math.isnan(value):
         return "N/M"
     if value < 0:
-        return f"-${abs(value):,.0f}"
-    return f"${value:,.0f}"
+        return f"-${abs(value):,.{decimals}f}"
+    return f"${value:,.{decimals}f}"
 
 
-def md_currency(value: float) -> str:
+def md_currency(value: float, decimals: int = 0) -> str:
     """Escape dollar signs for use inside st.markdown to avoid LaTeX math mode."""
-    return format_currency(value).replace("$", r"\$")
+    return format_currency(value, decimals).replace("$", r"\$")
 
 
 def load_preset(name: str) -> None:
@@ -359,13 +363,21 @@ def load_preset(name: str) -> None:
         st.session_state[key] = PRESETS[name][key]
 
 
-# Seed session state from URL query params so users can share scenarios via link
-for key in DEFAULT_ASSUMPTIONS:
-    if key in st.query_params:
-        try:
-            st.session_state[key] = float(st.query_params[key])
-        except (ValueError, TypeError):
-            pass
+# Shared assumptions initialize a session; later edits and presets take precedence.
+if not st.session_state.get("assumptions_initialized", False):
+    for key, default in DEFAULT_ASSUMPTIONS.items():
+        value = default
+        if key in st.query_params:
+            try:
+                shared_value = float(st.query_params[key])
+                if math.isfinite(shared_value) and (
+                    key != "holding_period_years" or shared_value >= 1
+                ):
+                    value = shared_value
+            except (ValueError, TypeError):
+                pass
+        st.session_state[key] = value
+    st.session_state["assumptions_initialized"] = True
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +402,14 @@ for name, data in PRESETS.items():
         break
 if active_preset:
     st.sidebar.caption(PRESETS[active_preset]["caption"])
+    preset_questions = {
+        "Growth Story": "How much value remains if EBITDA does not grow?",
+        "Multiple Expansion": "What happens if the exit multiple stays at entry?",
+        "Debt Paydown": "Where would the repayment cash come from?",
+        "Distressed": "Why is interaction positive despite deterioration?",
+        "All Engines": "Which assumption would you challenge first?",
+    }
+    st.sidebar.info(f"Discuss: {preset_questions[active_preset]}")
 
 st.sidebar.divider()
 
@@ -543,7 +563,7 @@ component_labels = [
     debt_label,
 ]
 
-reconciliation_check = round(exit_equity - (entry_equity + sum(components)), 2)
+reconciliation_check = exit_equity - (entry_equity + sum(components))
 
 invalid_capital_structure = entry_equity <= 0
 
@@ -551,7 +571,7 @@ moic = float("nan")
 irr = float("nan")
 if not invalid_capital_structure and entry_equity != 0:
     moic = exit_equity / entry_equity
-if not math.isnan(moic) and moic > 0 and holding_period_years > 0:
+if not math.isnan(moic) and moic >= 0 and holding_period_years > 0:
     irr = moic ** (1.0 / holding_period_years) - 1.0
 
 moic_display = (
@@ -560,6 +580,15 @@ moic_display = (
 irr_display = (
     f"{irr * 100:,.1f}%" if (not math.isnan(irr) and not invalid_capital_structure) else "N/M"
 )
+
+if not invalid_capital_structure and exit_equity < 0:
+    st.warning(
+        "Exit debt exceeds enterprise value. The negative equity residual and MOIC "
+        "describe the bridge arithmetic, not ordinary shareholder sale proceeds. "
+        "Actual recoveries depend on the transaction structure; IRR is not meaningful here."
+    )
+elif not invalid_capital_structure and exit_equity == 0:
+    st.warning("Exit equity is zero: all invested equity is lost (MOIC 0.00x, IRR −100%).")
 
 # Dynamic table labels
 if exit_net_debt >= 0:
@@ -699,8 +728,8 @@ with data_tab:
 
     def pct_contrib(val):
         if total_equity_change == 0:
-            return "0%"
-        return f"{abs(val) / abs(total_equity_change) * 100:,.0f}%"
+            return "N/M"
+        return f"{val / abs(total_equity_change) * 100:+,.0f}%"
 
     summary_rows = [
         ("Key Values", ""),
@@ -736,17 +765,23 @@ with data_tab:
         (f"{debt_label} Contribution", pct_contrib(debt_effect)),
         ("Model Integrity", ""),
         (
-            "Reconciliation Check (Tolerance < $0.01)",
+            "Reconciliation Check (Tolerance < 0.01 $mm)",
             format_currency(reconciliation_check),
         ),
     ]
 
     summary_df = pd.DataFrame(summary_rows, columns=["Metric", "Value"])
     st.dataframe(summary_df, width="stretch", hide_index=True)
+    st.caption(
+        "Contribution % = component / absolute net equity change. Positive values add equity; "
+        "negative values reduce it. Offsetting drivers can exceed 100%; signed contributions "
+        "sum to +100% for a gain or −100% for a loss, before rounding. "
+        "Percentages are N/M when net equity change is zero."
+    )
 
     is_balanced = abs(reconciliation_check) < 0.01
     if is_balanced:
-        st.success("Model Balanced \u2013 All inputs reconcile correctly.")
+        st.success("Bridge arithmetic reconciles (absolute residual < 0.01 USD million).")
     else:
         st.error("Check Math \u2013 Model does not reconcile.")
 
@@ -825,56 +860,6 @@ with summary_tab:
             )
             st.caption(desc)
 
-    st.divider()
-
-    st.subheader("Relative Contribution")
-
-    contrib_data = pd.DataFrame({
-        "Component": component_labels,
-        "Value": components,
-    })
-    contrib_data["Abs Value"] = contrib_data["Value"].abs()
-    contrib_data["Color"] = contrib_data["Value"].apply(
-        lambda v: "#2e7d32" if v >= 0 else "#c62828"
-    )
-
-    contrib_fig = go.Figure()
-    for _, row in contrib_data.iterrows():
-        contrib_fig.add_trace(
-            go.Bar(
-                x=[row["Abs Value"]],
-                y=[row["Component"]],
-                orientation="h",
-                marker_color=row["Color"],
-                text=f"{format_currency(abs(row['Value']))} mm",
-                textposition="outside",
-                showlegend=False,
-                hovertemplate="%{y}: %{text}<extra></extra>",
-            )
-        )
-
-    contrib_fig.update_layout(
-        xaxis_title="Absolute Contribution ($mm)",
-        xaxis={
-            "tickfont": {"family": "Inter, sans-serif", "color": "#5b5b6b"},
-            "gridcolor": "#f0ebe3",
-            "zeroline": False,
-        },
-        yaxis={
-            "tickfont": {"family": "Inter, sans-serif", "color": "#1a1a2e", "size": 13},
-        },
-        plot_bgcolor="#faf8f5",
-        paper_bgcolor="#faf8f5",
-        margin={"l": 10, "r": 80, "t": 10, "b": 10},
-        height=200,
-        font={"family": "Inter, sans-serif"},
-        barmode="group",
-    )
-    contrib_fig.update_xaxes(showgrid=True, gridcolor="#f0ebe3")
-    contrib_fig.update_yaxes(showgrid=False)
-
-    st.plotly_chart(contrib_fig, use_container_width=True)
-
 # ---------------------------------------------------------------------------
 # Tab 4: How It Works
 # ---------------------------------------------------------------------------
@@ -893,17 +878,17 @@ with how_tab:
             f"""
 **Enterprise Value (EV)** = EBITDA \u00d7 Multiple
 
-- **Entry EV**: {entry_ebitda:,.0f} \u00d7 {entry_multiple:.0f}x = **{md_currency(entry_ev)}**
-- **Exit EV**: {exit_ebitda:,.0f} \u00d7 {exit_multiple:.0f}x = **{md_currency(exit_ev)}**
+- **Entry EV**: {entry_ebitda:,.2f} \u00d7 {entry_multiple:.2f}x = **{md_currency(entry_ev, 2)}**
+- **Exit EV**: {exit_ebitda:,.2f} \u00d7 {exit_multiple:.2f}x = **{md_currency(exit_ev, 2)}**
 
 **Equity Value** = Enterprise Value \u2212 Net Debt
 
 - **Entry Equity**:
-  {md_currency(entry_ev)} \u2212 {md_currency(initial_debt)}
-  = **{md_currency(entry_equity)}**
+  {md_currency(entry_ev, 2)} \u2212 {md_currency(initial_debt, 2)}
+  = **{md_currency(entry_equity, 2)}**
 - **Exit Equity**:
-  {md_currency(exit_ev)} \u2212 {md_currency(exit_net_debt)}
-  = **{md_currency(exit_equity)}**
+  {md_currency(exit_ev, 2)} \u2212 {md_currency(exit_net_debt, 2)}
+  = **{md_currency(exit_equity, 2)}**
         """
         )
 
@@ -915,35 +900,43 @@ This is a **mathematical identity** \u2014 it always holds:
 
 \u0394**EV = EBITDA Growth + Multiple Expansion + Interaction Effect**
 
-| Component | Formula | Current Value |
-|-----------|---------|---------------|
-| **EBITDA Growth** | (Exit EBITDA \u2212 Entry EBITDA) \u00d7 Entry Multiple | |
-| **Multiple Expansion** | Entry EBITDA \u00d7 (Exit Multiple \u2212 Entry Multiple) | |
-| **Interaction Effect** |
-  (Exit EBITDA \u2212 Entry EBITDA) \u00d7 (Exit Multiple \u2212 Entry Multiple) | |
+| Component | Formula |
+|-----------|---------|
+| **EBITDA Growth** | (Exit EBITDA \u2212 Entry EBITDA) \u00d7 Entry Multiple |
+| **Multiple Expansion** | Entry EBITDA \u00d7 (Exit Multiple \u2212 Entry Multiple) |
+| **Interaction Effect** | (Exit EBITDA − Entry EBITDA) × (Exit Multiple − Entry Multiple) |
 
 The interaction effect captures what happens when *both* EBITDA and the multiple change
 simultaneously. If you grew EBITDA and expanded the multiple, the interaction effect
 is the additional value created beyond what each would have generated alone.
+When both EBITDA and the multiple fall, interaction is positive: it offsets the overlap
+between the two separately calculated losses. It is an algebraic cross-term, rather than
+an independently actionable operating lever.
         """
         )
+        growth_calculation = (
+            f"({exit_ebitda:,.2f} − {entry_ebitda:,.2f}) × {entry_multiple:.2f}x"
+        )
+        multiple_calculation = (
+            f"{entry_ebitda:,.2f} × ({exit_multiple:.2f}x − {entry_multiple:.2f}x)"
+        )
+        interaction_calculation = (
+            f"({exit_ebitda:,.2f} − {entry_ebitda:,.2f}) "
+            f"× ({exit_multiple:.2f}x − {entry_multiple:.2f}x)"
+        )
+        growth_value = md_currency(ebitda_growth_impact, 2)
+        multiple_value = md_currency(multiple_expansion_impact, 2)
+        interaction_value = md_currency(interaction_effect, 2)
         st.markdown(
             f"""
 **With your numbers:**
 
 | Component | Calculation | Value |
 |-----------|------------|-------|
-| EBITDA Growth |
-  ({exit_ebitda:,.0f} \u2212 {entry_ebitda:,.0f}) \u00d7 {entry_multiple:.0f}x
-  | **{md_currency(ebitda_growth_impact)}** |
-| Multiple Expansion |
-  {entry_ebitda:,.0f} \u00d7 ({exit_multiple:.0f}x \u2212 {entry_multiple:.0f}x)
-  | **{md_currency(multiple_expansion_impact)}** |
-| Interaction Effect |
-  ({exit_ebitda:,.0f} \u2212 {entry_ebitda:,.0f})
-  \u00d7 ({exit_multiple:.0f}x \u2212 {entry_multiple:.0f}x)
-  | **{md_currency(interaction_effect)}** |
-| **Total \u0394EV** | | **{md_currency(delta_ev)}** |
+| EBITDA Growth | {growth_calculation} | **{growth_value}** |
+| Multiple Expansion | {multiple_calculation} | **{multiple_value}** |
+| Interaction Effect | {interaction_calculation} | **{interaction_value}** |
+| **Total \u0394EV** | | **{md_currency(delta_ev, 2)}** |
         """
         )
 
@@ -951,20 +944,21 @@ is the additional value created beyond what each would have generated alone.
         st.markdown(
             f"""
 Equity value also changes when debt is paid down (or added). Every dollar of debt paydown
-flows directly to equity holders.
+increases the equity residual by one dollar, holding enterprise value constant.
+This bridge assumes the repayment amount; it does not model the cash flow that funds it.
 
-- **{debt_label}**: {md_currency(debt_effect)}
+- **{debt_label}**: {md_currency(debt_effect, 2)}
 
 **Full Bridge Identity:**
 
 > Exit Equity = Entry Equity + EBITDA Growth + Multiple Expansion
 > + Interaction Effect + Debt Component
 
-**Reconciliation Check:** {md_currency(reconciliation_check)}
+**Reconciliation Check:** {md_currency(reconciliation_check, 2)}
         """
         )
         if abs(reconciliation_check) < 0.01:
-            st.success("\u2713 The model balances perfectly.")
+            st.success("Bridge arithmetic reconciles (absolute residual < 0.01 USD million).")
         else:
             st.error("\u2717 The model does not balance.")
 
@@ -973,11 +967,14 @@ flows directly to equity holders.
             f"""
 **MOIC** (Multiple of Invested Capital) = Exit Equity \u00f7 Entry Equity
 
-- MOIC = {md_currency(exit_equity)} \u00f7 {md_currency(entry_equity)} = **{moic_display}**
+- MOIC = {md_currency(exit_equity, 2)} \u00f7 {md_currency(entry_equity, 2)} = **{moic_display}**
+
+Negative exit equity is an algebraic residual, not ordinary shareholder sale proceeds;
+its negative MOIC is not an investor cash-flow return. At zero exit equity, IRR is −100%.
 
 **IRR** (Internal Rate of Return) = MOIC^(1/n) \u2212 1, where n = holding period
 
-- IRR = {moic_display}^(1 \u00f7 {holding_period_years:,.0f}) \u2212 1 = **{irr_display}**
+- IRR = {moic_display}^(1 \u00f7 {holding_period_years:,.2f}) \u2212 1 = **{irr_display}**
 - *Assumes a single terminal cash flow and no interim dividends.*
         """
         )
@@ -989,12 +986,12 @@ flows directly to equity holders.
   — the company's earnings power increased.
 - **Multiple Expansion** reflects market sentiment
   — investors pay more for each dollar of earnings.
-- **The Interaction Effect** is the "double count" of
-  simultaneous growth and re-rating — largest when
-  both move significantly in the same direction.
+- **The Interaction Effect** is the cross-term of EBITDA and multiple changes.
+  It is positive when both rise or both fall, and negative when they move in opposite directions.
 - **Debt Paydown** directly increases equity
   — leverage amplifies both gains and losses.
-- If the model is balanced (reconciliation < $0.01), the math is correct.
+- Reconciliation checks the bridge arithmetic. It does not validate assumptions
+  or establish that debt repayment is fundable.
         """
         )
 
@@ -1007,7 +1004,8 @@ st.markdown(
     """
     <div style="text-align:center; color:#8f8f9f; font-size:0.8rem; padding: 1rem 0;">
         Built by an MBA student ·
-        <a href="https://github.com/KaramelBytes/LBO-learning-sim" target="_blank" style="color:#8f8f9f; text-decoration:underline;">View source on GitHub</a> ·
+        <a href="https://github.com/KaramelBytes/LBO-learning-sim" target="_blank"
+           style="color:#8f8f9f; text-decoration:underline;">View source on GitHub</a> ·
         MIT Licensed
     </div>
     """,
