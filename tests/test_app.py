@@ -16,6 +16,9 @@ class BridgeTests(unittest.TestCase):
         })
         app.run()
         self.assertFalse(list(app.exception))
+        for warning in app.warning:
+            self.assertNotIn("Session State API", warning.value)
+            self.assertNotIn("keyword arguments", warning.value)
         return app
 
     def metrics(self, app):

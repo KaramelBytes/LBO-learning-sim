@@ -264,17 +264,21 @@ p, span, label, div, .stMarkdown p {
     border-radius: 0 0 var(--radius) var(--radius);
 }
 
-#MainMenu, footer, [data-testid="stHeader"] {
+#MainMenu, footer, [data-testid="stToolbarActions"], .stAppDeployButton {
     visibility: hidden;
 }
 
-[data-testid="collapsedControl"] {
+[data-testid="stHeader"] {
+    background: transparent;
+}
+
+[data-testid="stExpandSidebarButton"] {
     background-color: var(--accent-light);
     border: 1px solid var(--accent);
     border-radius: var(--radius);
 }
 
-[data-testid="collapsedControl"] svg {
+[data-testid="stExpandSidebarButton"] svg {
     fill: var(--accent-strong);
 }
 
@@ -285,15 +289,6 @@ p, span, label, div, .stMarkdown p {
 
 div[data-baseweb="notification"] {
     border-radius: var(--radius);
-}
-
-/* ── Preset sidebar buttons: prevent word-break orphans ── */
-[data-testid="stSidebar"] [data-testid="column"] [data-testid="stButton"] > button {
-    white-space: nowrap !important;
-    font-size: 0.75rem !important;
-    padding: 0.25rem 0.4rem !important;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* ── Responsive: tablet ── */
@@ -307,7 +302,15 @@ div[data-baseweb="notification"] {
 /* ── Responsive: mobile ── */
 @media (max-width: 640px) {
     .stApp header { padding-top: 0.25rem; }
-    [data-testid="stAppViewContainer"] > .main { padding: 0.5rem 0.5rem 2rem; }
+    [data-testid="stMainBlockContainer"] { padding: 3.25rem 1rem 1rem; }
+    .stApp h1 { font-size: 1.5rem; }
+    .stApp h2 { font-size: 1.1rem; }
+    .st-key-key_metrics [data-testid="stHorizontalBlock"] { gap: 0.75rem; }
+    .st-key-key_metrics [data-testid="stColumn"] {
+        width: calc(50% - 0.375rem) !important;
+        flex: 1 1 calc(50% - 0.375rem) !important;
+        min-width: 0 !important;
+    }
     h1 { font-size: 1.2rem; padding-bottom: 0.25rem; }
     h2 { font-size: 0.95rem; }
     [data-testid="stCaptionContainer"] { font-size: 0.75rem; }
@@ -388,12 +391,10 @@ st.sidebar.header("Inputs")
 st.sidebar.caption("Adjust assumptions below. Hover over each field for context.")
 
 st.sidebar.subheader("Scenario Presets")
-preset_cols = st.sidebar.columns(2)
-for i, name in enumerate(PRESETS):
-    with preset_cols[i % 2]:
-        if st.button(name, key=f"preset_{name}", width="stretch"):
-            load_preset(name)
-            st.rerun()
+for name in PRESETS:
+    if st.sidebar.button(name, key=f"preset_{name}", width="stretch"):
+        load_preset(name)
+        st.rerun()
 
 active_preset = None
 for name, data in PRESETS.items():
@@ -420,7 +421,6 @@ if st.sidebar.button("Reset to Defaults", width="stretch"):
 
 entry_ebitda = st.sidebar.number_input(
     "Entry EBITDA ($ Millions)",
-    value=DEFAULT_ASSUMPTIONS["entry_ebitda"],
     step=5.0,
     format="%.2f",
     key="entry_ebitda",
@@ -431,7 +431,6 @@ entry_ebitda = st.sidebar.number_input(
 )
 entry_multiple = st.sidebar.number_input(
     "Entry EV/EBITDA Multiple",
-    value=DEFAULT_ASSUMPTIONS["entry_multiple"],
     step=0.25,
     format="%.2f",
     key="entry_multiple",
@@ -442,7 +441,6 @@ entry_multiple = st.sidebar.number_input(
 )
 initial_debt = st.sidebar.number_input(
     "Initial Debt ($ Millions)",
-    value=DEFAULT_ASSUMPTIONS["initial_debt"],
     step=10.0,
     format="%.2f",
     key="initial_debt",
@@ -453,7 +451,6 @@ initial_debt = st.sidebar.number_input(
 )
 exit_ebitda = st.sidebar.number_input(
     "Exit EBITDA ($ Millions)",
-    value=DEFAULT_ASSUMPTIONS["exit_ebitda"],
     step=5.0,
     format="%.2f",
     key="exit_ebitda",
@@ -464,7 +461,6 @@ exit_ebitda = st.sidebar.number_input(
 )
 exit_multiple = st.sidebar.number_input(
     "Exit EV/EBITDA Multiple",
-    value=DEFAULT_ASSUMPTIONS["exit_multiple"],
     step=0.25,
     format="%.2f",
     key="exit_multiple",
@@ -475,7 +471,6 @@ exit_multiple = st.sidebar.number_input(
 )
 debt_paydown = st.sidebar.number_input(
     "Debt Paydown ($ Millions)",
-    value=DEFAULT_ASSUMPTIONS["debt_paydown"],
     step=10.0,
     format="%.2f",
     key="debt_paydown",
@@ -487,7 +482,6 @@ debt_paydown = st.sidebar.number_input(
 holding_period_years = st.sidebar.number_input(
     "Holding Period (Years)",
     min_value=1.0,
-    value=DEFAULT_ASSUMPTIONS["holding_period_years"],
     step=0.25,
     format="%.2f",
     key="holding_period_years",
@@ -610,18 +604,19 @@ exit_leverage = exit_net_debt / exit_ev if exit_ev != 0 else float("nan")
 # ---------------------------------------------------------------------------
 
 st.subheader("Key Metrics")
-kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-with kpi_col1:
-    st.metric("Entry Equity", format_currency(entry_equity))
-with kpi_col2:
-    st.metric("Exit Equity", format_currency(exit_equity))
-with kpi_col3:
-    st.metric("MOIC", moic_display)
-    if invalid_capital_structure:
-        st.caption("Entry equity \u2264 0 \u2014 not meaningful")
-with kpi_col4:
-    st.metric("IRR", irr_display)
-    st.caption("Single-exit, no interim dividends")
+with st.container(key="key_metrics"):
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    with kpi_col1:
+        st.metric("Entry Equity", format_currency(entry_equity))
+    with kpi_col2:
+        st.metric("Exit Equity", format_currency(exit_equity))
+    with kpi_col3:
+        st.metric("MOIC", moic_display)
+        if invalid_capital_structure:
+            st.caption("Entry equity \u2264 0 \u2014 not meaningful")
+    with kpi_col4:
+        st.metric("IRR", irr_display)
+st.caption("IRR assumes a single exit and no interim dividends.")
 
 # ---------------------------------------------------------------------------
 # Tabs
@@ -656,11 +651,12 @@ with bridge_tab:
             ],
             textposition="outside",
             textfont={
-                "size": 13,
+                "size": 11,
                 "color": "#1a1a2e",
                 "family": "Inter, sans-serif",
             },
-            hoverinfo="x+y",
+            customdata=x_labels,
+            hovertemplate="%{customdata}: %{y:,.2f} $mm<extra></extra>",
             hoverlabel={
                 "bgcolor": "#ffffff",
                 "bordercolor": "#d4ccc0",
@@ -674,21 +670,21 @@ with bridge_tab:
     )
 
     waterfall.update_layout(
-        title={
-            "text": "LBO Equity Value Creation Bridge",
-            "font": {
-                "size": 18,
-                "family": "Inter, sans-serif",
-                "color": "#1a1a2e",
-            },
-        },
         yaxis_title={
-            "text": "USD Millions ($mm)",
+            "text": "$mm",
             "font": {"size": 13, "family": "Inter, sans-serif", "color": "#5b5b6b"},
         },
         xaxis={
+            "tickmode": "array",
+            "tickvals": x_labels,
+            "ticktext": [
+                "Entry<br>equity", "EBITDA<br>growth", "Multiple<br>change",
+                "Inter-<br>action",
+                "Debt<br>paydown" if debt_paydown >= 0 else "Added<br>debt",
+                "Exit<br>equity",
+            ],
             "tickfont": {
-                "size": 12,
+                "size": 10,
                 "family": "Inter, sans-serif",
                 "color": "#5b5b6b",
             },
@@ -697,7 +693,8 @@ with bridge_tab:
         showlegend=False,
         plot_bgcolor="#faf8f5",
         paper_bgcolor="#faf8f5",
-        margin={"l": 50, "r": 30, "t": 50, "b": 40},
+        margin={"l": 40, "r": 12, "t": 30, "b": 55},
+        height=400,
         hovermode="x",
         font={"family": "Inter, sans-serif"},
     )
@@ -711,7 +708,11 @@ with bridge_tab:
         zerolinewidth=1,
     )
 
-    st.plotly_chart(waterfall, use_container_width=True)
+    st.plotly_chart(
+        waterfall,
+        use_container_width=True,
+        config={"displayModeBar": False, "scrollZoom": False},
+    )
 
     if invalid_capital_structure:
         st.error(
